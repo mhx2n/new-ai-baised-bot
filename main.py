@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, BotCommand
 from aiohttp import web
 
 from config import BOT_TOKEN, OWNER_ID
@@ -35,7 +35,17 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
-@dp.message(CommandStart())
+# সেটআপ বট কমান্ড মেনু
+async def set_bot_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Initialize Utility Suite"),
+        BotCommand(command="help", description="View all system commands"),
+        BotCommand(command="convert", description="Number Base Converter"),
+        BotCommand(command="admin", description="Owner Dashboard")
+    ]
+    await bot.set_my_commands(commands)
+
+@dp.message(CommandStart(prefix="/."))
 async def start_command(message: types.Message):
     user = message.from_user
     if db.add_user(user.id, user.username, user.first_name):
@@ -46,12 +56,23 @@ async def start_command(message: types.Message):
         f"**Available Modules:**\n"
         f"• Media Extraction (Submit a supported URL)\n"
         f"• Code & Logic Resolution (Submit your technical query)\n"
-        f"• Number Base Conversion (Execute /convert)\n\n"
+        f"• Number Base Conversion (Execute /convert or .convert)\n\n"
         f"System is active and awaiting input."
     )
     await message.reply(welcome_text, parse_mode="Markdown")
 
-@dp.message(Command("convert"))
+@dp.message(Command("help", prefix="/."))
+async def help_command(message: types.Message):
+    help_text = (
+        f"**System Command Menu**\n\n"
+        f"`.start` or `/start` - Initialize System\n"
+        f"`.help` or `/help` - Show this menu\n"
+        f"`.convert` or `/convert` - Advanced Number Converter\n\n"
+        f"*(You can also just send a YouTube, FB, Insta, or TikTok link directly to extract media, or type any question to consult the AI.)*"
+    )
+    await message.reply(help_text, parse_mode="Markdown")
+
+@dp.message(Command("convert", prefix="/."))
 async def start_conversion(message: types.Message, state: FSMContext):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Decimal", callback_with_data="cb_dec"),
@@ -78,30 +99,20 @@ async def process_conversion_value(message: types.Message, state: FSMContext):
     await message.reply(result_text, parse_mode="Markdown")
     await state.clear()
 
-# Admin Interface
-@dp.message(Command("admin"))
+@dp.message(Command("admin", prefix="/."))
 async def admin_panel(message: types.Message):
-    if message.from_user.id != OWNER_ID:
-        return
-    
+    if message.from_user.id != OWNER_ID: return
     total_users = len(db.data.get("users", {}))
-    admin_text = (
-        f"**System Administrator Dashboard**\n\n"
-        f"• Total Active Users: `{total_users}`\n"
-        f"• Server Status: `Operational`\n\n"
-        f"Commands: /broadcast | /logs"
-    )
-    await message.reply(admin_text, parse_mode="Markdown")
+    await message.reply(f"**Administrator Dashboard**\n• Total Users: `{total_users}`\n• Status: `Operational`\nCommands: /broadcast | /logs", parse_mode="Markdown")
 
-@dp.message(Command("logs"))
+@dp.message(Command("logs", prefix="/."))
 async def view_logs(message: types.Message):
     if message.from_user.id != OWNER_ID: return
     logs = db.data.get("logs", [])
-    if not logs:
-        return await message.reply("No recent activity logged.")
+    if not logs: return await message.reply("No recent activity logged.")
     await message.reply(f"**System Logs:**\n\n" + "\n".join(logs[-15:]), parse_mode="Markdown")
 
-@dp.message(Command("broadcast"))
+@dp.message(Command("broadcast", prefix="/."))
 async def start_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != OWNER_ID: return
     await message.reply("Provide the broadcast message payload:")
@@ -112,24 +123,20 @@ async def execute_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != OWNER_ID: return
     users = db.data.get("users", {})
     success_count = 0
-    
     status_msg = await message.reply("Executing broadcast protocol...")
-    
     for user_id in users.keys():
         try:
             await bot.send_message(chat_id=int(user_id), text=message.text)
             success_count += 1
             await asyncio.sleep(0.05)
-        except Exception:
-            continue
-            
+        except: continue
     await status_msg.edit_text(f"Broadcast complete. Payload delivered to `{success_count}` users.")
     await state.clear()
 
 @dp.message()
 async def universal_handler(message: types.Message):
     text = message.text.strip()
-    is_media_link = any(d in text.lower() for d in ["youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com", "tiktok.com"])
+    is_media_link = any(d in text.lower() for d in ["youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com", "tiktok.com", "fb.gg"])
     
     if is_media_link:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -140,11 +147,11 @@ async def universal_handler(message: types.Message):
         return
 
     msg = await message.reply("`Processing request...`", parse_mode="Markdown")
-    ai_reply = await get_ai_response(text)
-    try: 
+    try:
+        ai_reply = await get_ai_response(text)
         await msg.edit_text(ai_reply, parse_mode="Markdown")
-    except: 
-        await msg.edit_text(ai_reply)
+    except Exception as e: 
+        await msg.edit_text(f"System Error: Could not process request. Please try again.")
 
 @dp.callback_query(F.data.startswith("dl_"))
 async def process_media_download(callback: types.CallbackQuery):
@@ -164,10 +171,11 @@ async def process_media_download(callback: types.CallbackQuery):
         await callback.message.delete()
         if os.path.exists(filepath): os.remove(filepath)
     except Exception as e:
-        await callback.message.edit_text(f"Extraction failed: {str(e)[:50]}")
+        await callback.message.edit_text(f"Extraction failed: Media might be private or unavailable.")
 
 async def main():
     await db.load()
+    await set_bot_commands(bot) # Sets the menu commands natively
     await asyncio.gather(start_web_server(), dp.start_polling(bot))
 
 if __name__ == '__main__':
