@@ -16,37 +16,29 @@ class GitHubDB:
             "Authorization": f"token {self.token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        self.data = {"users": {}, "logs": []}
+        self.data = {"users": {}, "logs": [], "api_keys": {"gemini": None, "cohere": None}}
         self.sha = None
 
     async def load(self):
         if not self.token or not self.repo:
             return
-        
         async with aiohttp.ClientSession() as session:
             async with session.get(self.url, headers=self.headers) as resp:
                 if resp.status == 200:
                     res = await resp.json()
                     content = base64.b64decode(res['content']).decode('utf-8')
-                    self.data = json.loads(content)
+                    loaded_data = json.loads(content)
+                    self.data = {**self.data, **loaded_data} # Merge to keep new structure
                     self.sha = res['sha']
                 elif resp.status == 404:
-                    self.data = {"users": {}, "logs": []}
                     self.sha = None
 
     async def save(self):
-        if not self.token or not self.repo:
-            return False
-        
+        if not self.token or not self.repo: return False
         content_str = json.dumps(self.data, indent=4)
         content_b64 = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
-        payload = {
-            "message": "Update database via Telegram Bot",
-            "content": content_b64
-        }
-        if self.sha:
-            payload["sha"] = self.sha
-
+        payload = {"message": "Update DB via Bot", "content": content_b64}
+        if self.sha: payload["sha"] = self.sha
         async with aiohttp.ClientSession() as session:
             async with session.put(self.url, headers=self.headers, json=payload) as resp:
                 if resp.status in [200, 201]:
@@ -58,16 +50,18 @@ class GitHubDB:
     def add_user(self, user_id, username, first_name):
         uid = str(user_id)
         if uid not in self.data["users"]:
-            self.data["users"][uid] = {
-                "username": username,
-                "first_name": first_name
-            }
+            self.data["users"][uid] = {"username": username, "first_name": first_name}
             return True
         return False
 
     def add_log(self, log_message):
         self.data["logs"].append(log_message)
-        if len(self.data["logs"]) > 100:
-            self.data["logs"].pop(0)
+        if len(self.data["logs"]) > 100: self.data["logs"].pop(0)
+
+    def set_api_key(self, provider, key):
+        self.data["api_keys"][provider] = key
+
+    def get_api_key(self, provider):
+        return self.data.get("api_keys", {}).get(provider)
 
 db = GitHubDB()
