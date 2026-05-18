@@ -1,19 +1,21 @@
-import google.generativeai as genai
-import aiohttp
-from config import GEMINI_API_KEY, COHERE_API_KEY
+from google import genai
+from config import GEMINI_API_KEY
 
-if GEMINI_API_KEY: 
-    genai.configure(api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    client = None
 
 async def ask_gemini(prompt):
-    if not GEMINI_API_KEY: 
+    if not client:
         return "System Error: Gemini API Key is missing or invalid."
     try:
-        # এখানে নতুন এবং ফাস্ট মডেল gemini-1.5-flash অ্যাড করা হয়েছে
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = await model.generate_content_async(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
         return response.text
-    except Exception as e: 
+    except Exception as e:
         return f"Service Interruption: {str(e)}"
 
 async def get_ai_response(prompt, provider="gemini"):
