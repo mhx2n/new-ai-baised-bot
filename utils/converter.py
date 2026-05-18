@@ -32,9 +32,10 @@ def convert_all(value_str, from_base):
         elif from_base == "hex": decimal_val = int(value_str, 16)
         elif from_base == "gray": decimal_val = gray_to_dec(value_str)
         elif from_base == "excess3": decimal_val = excess3_to_dec(value_str)
-        else: return "❌ Unknown base option selected."
+        else: return "Error: Unrecognized base option."
 
-        if decimal_val < 0: return "❌ Please enter a positive number."
+        if decimal_val < 0: 
+            return "Error: Negative values are not supported in this module."
 
         res_bin = bin(decimal_val)[2:]
         res_oct = oct(decimal_val)[2:]
@@ -43,13 +44,14 @@ def convert_all(value_str, from_base):
         res_e3 = dec_to_excess3(decimal_val)
 
         return (
-            f"🔢 **Conversion Results for ({value_str}) from {from_base.upper()}:**\n\n"
-            f"🔹 **Decimal:** `{decimal_val}`\n"
-            f"🔹 **Binary:** `{res_bin}`\n"
-            f"🔹 **Octal:** `{res_oct}`\n"
-            f"🔹 **Hexadecimal:** `{res_hex}`\n"
-            f"🔹 **Gray Code:** `{res_gray}`\n"
-            f"🔹 **Excess-3 Code:** `{res_e3}`"
+            f"**Base Conversion Results**\n"
+            f"Input Value: `{value_str}` (Base: {from_base.upper()})\n\n"
+            f"• Decimal: `{decimal_val}`\n"
+            f"• Binary: `{res_bin}`\n"
+            f"• Octal: `{res_oct}`\n"
+            f"• Hexadecimal: `{res_hex}`\n"
+            f"• Gray Code: `{res_gray}`\n"
+            f"• Excess-3: `{res_e3}`"
         )
     except Exception:
-        return f"❌ **Error:** invalid value or format for base {from_base.upper()}."
+        return f"Error: Invalid value or format provided for base {from_base.upper()}."
