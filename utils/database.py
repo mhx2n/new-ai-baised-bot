@@ -12,32 +12,37 @@ class GitHubDB:
         self.repo = GITHUB_REPO
         self.filename = GITHUB_FILENAME
         self.url = f"https://api.github.com/repos/{self.repo}/contents/{self.filename}"
-        self.headers = {
-            "Authorization": f"token {self.token}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-        self.data = {"users": {}, "logs": [], "api_keys": {"gemini": None, "cohere": None}}
+        self.headers = {"Authorization": f"token {self.token}", "Accept": "application/vnd.github.v3+json"}
+        # API keys will now be stored in arrays (lists)
+        self.data = {"users": {}, "logs": [], "api_keys": {"gemini": [], "cohere": []}}
         self.sha = None
 
     async def load(self):
-        if not self.token or not self.repo:
-            return
+        if not self.token or not self.repo: return
         async with aiohttp.ClientSession() as session:
             async with session.get(self.url, headers=self.headers) as resp:
                 if resp.status == 200:
                     res = await resp.json()
                     content = base64.b64decode(res['content']).decode('utf-8')
                     loaded_data = json.loads(content)
-                    self.data = {**self.data, **loaded_data} # Merge to keep new structure
+                    
+                    # Ensure new array structure exists for old databases
+                    if "api_keys" not in loaded_data: loaded_data["api_keys"] = {"gemini": [], "cohere": []}
+                    elif isinstance(loaded_data["api_keys"].get("gemini"), str):
+                        # Convert old string keys to list
+                        g_key = loaded_data["api_keys"]["gemini"]
+                        c_key = loaded_data["api_keys"].get("cohere", "")
+                        loaded_data["api_keys"] = {"gemini": [g_key] if g_key else [], "cohere": [c_key] if c_key else []}
+                        
+                    self.data = {**self.data, **loaded_data}
                     self.sha = res['sha']
-                elif resp.status == 404:
-                    self.sha = None
+                elif resp.status == 404: self.sha = None
 
     async def save(self):
         if not self.token or not self.repo: return False
         content_str = json.dumps(self.data, indent=4)
         content_b64 = base64.b64encode(content_str.encode('utf-8')).decode('utf-8')
-        payload = {"message": "Update DB via Bot", "content": content_b64}
+        payload = {"message": "Update DB", "content": content_b64}
         if self.sha: payload["sha"] = self.sha
         async with aiohttp.ClientSession() as session:
             async with session.put(self.url, headers=self.headers, json=payload) as resp:
@@ -54,14 +59,20 @@ class GitHubDB:
             return True
         return False
 
-    def add_log(self, log_message):
-        self.data["logs"].append(log_message)
-        if len(self.data["logs"]) > 100: self.data["logs"].pop(0)
+    def add_api_key(self, provider, key):
+        if key not in self.data["api_keys"][provider]:
+            self.data["api_keys"][provider].append(key)
+            return True
+        return False
 
-    def set_api_key(self, provider, key):
-        self.data["api_keys"][provider] = key
+    def remove_api_key(self, provider, index):
+        try:
+            self.data["api_keys"][provider].pop(index)
+            return True
+        except IndexError:
+            return False
 
-    def get_api_key(self, provider):
-        return self.data.get("api_keys", {}).get(provider)
+    def get_api_keys(self, provider):
+        return self.data["api_keys"].get(provider, [])
 
 db = GitHubDB()
