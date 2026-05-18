@@ -134,7 +134,8 @@ async def exec_broadcast(message: types.Message, state: FSMContext):
 async def start_conv(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Decimal", callback_data="cb_dec"), InlineKeyboardButton(text="Binary", callback_data="cb_bin")],
-        [InlineKeyboardButton(text="Octal", callback_data="cb_oct"), InlineKeyboardButton(text="Hexadecimal", callback_data="cb_hex")]
+        [InlineKeyboardButton(text="Octal", callback_data="cb_oct"), InlineKeyboardButton(text="Hexadecimal", callback_data="cb_hex")],
+        [InlineKeyboardButton(text="Text to ASCII", callback_data="cb_ascii")]
     ])
     await message.reply("Select source base:", reply_markup=kb)
     await state.set_state(ConversionStates.selecting_base)
