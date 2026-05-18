@@ -1,5 +1,5 @@
 aiogram==3.4.1
-google-generativeai==0.4.1
+google-generativeai>=0.5.2
 aiohttp==3.9.3
-yt-dlp==2024.3.10
+yt-dlp
 python-dotenv==1.0.1
