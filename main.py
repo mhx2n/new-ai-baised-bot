@@ -173,10 +173,25 @@ async def process_media_download(callback: types.CallbackQuery):
     except Exception as e:
         await callback.message.edit_text(f"Extraction failed: Media might be private or unavailable.")
 
+# ... (উপরের বাকি সব কোড আগের মতোই থাকবে) ...
+
 async def main():
     await db.load()
-    await set_bot_commands(bot) # Sets the menu commands natively
-    await asyncio.gather(start_web_server(), dp.start_polling(bot))
+    await set_bot_commands(bot)
+    
+    # এই অংশটি যোগ করা হলো Conflict Error ফিক্স করার জন্য
+    print("Clearing previous webhook/polling connections...")
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    print("Starting bot polling...")
+    await asyncio.gather(
+        start_web_server(), 
+        dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    )
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # উইন্ডোজ বা নির্দিষ্ট কিছু এনভায়রনমেন্টে Event loop এরর ফিক্স করতে
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped manually.")
