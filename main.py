@@ -1,7 +1,7 @@
 import os
 import asyncio
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, BotCommand
@@ -45,7 +45,7 @@ async def set_bot_commands(bot: Bot):
     ]
     await bot.set_my_commands(commands)
 
-@dp.message(CommandStart(prefix="/."))
+@dp.message(Command("start", prefix="/."))
 async def start_command(message: types.Message):
     user = message.from_user
     if db.add_user(user.id, user.username, user.first_name):
