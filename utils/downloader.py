@@ -1,41 +1,36 @@
-import asyncio
-import yt_dlp
-import os
-
-os.makedirs("downloads", exist_ok=True)
+import aiohttp
+import json
 
 async def download_media(url, download_type='video'):
-    def sync_download():
-        opts = {
-            'outtmpl': 'downloads/%(id)s.%(ext)s',
-            'restrictfilenames': True,
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-            'geo_bypass': True,
-            'nocheckcertificate': True,
-            'extractor_retries': 3,
-            'format': 'best[ext=mp4]/best' if download_type == 'video' else 'bestaudio/best'
-        }
-        
-        # Spoofing as a real Windows 11 Chrome Browser to bypass blocks
-        yt_dlp.utils.std_headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                
-                if download_type == 'audio' and not filename.endswith('.mp3'):
-                    base, _ = os.path.splitext(filename)
-                    new_filename = base + ".mp3"
-                    os.rename(filename, new_filename)
-                    filename = new_filename
+    # Cobalt API is the most advanced zero-error media downloader available
+    api_url = "https://co.wuk.sh/api/json"
+    
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "url": url,
+        "isAudioOnly": True if download_type == 'audio' else False,
+        "aFormat": "mp3" if download_type == 'audio' else "best"
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, headers=headers, json=data, timeout=20) as resp:
+                if resp.status != 200:
+                    raise Exception("Server rejected the request. Link might be strictly private.")
                     
-                return filename, info.get('title', 'Media')
-        except Exception as e:
-            # Clean up the error message for the user
-            err_msg = str(e).split('\n')[0]
-            raise Exception(err_msg)
-
-    return await asyncio.to_thread(sync_download)
+                result = await resp.json()
+                
+                status = result.get("status")
+                if status == "error":
+                    raise Exception(result.get("text", "Unknown Error"))
+                elif status in ["stream", "redirect", "picker"]:
+                    # Returns the direct raw media URL
+                    return result.get("url"), "Media Extracted Successfully"
+                else:
+                    raise Exception("Unexpected response from extraction server.")
+    except Exception as e:
+        raise Exception(f"{str(e)}")
