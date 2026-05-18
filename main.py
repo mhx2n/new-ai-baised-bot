@@ -135,16 +135,16 @@ async def start_conv(message: types.Message, state: FSMContext):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Decimal", callback_data="cb_dec"), InlineKeyboardButton(text="Binary", callback_data="cb_bin")],
         [InlineKeyboardButton(text="Octal", callback_data="cb_oct"), InlineKeyboardButton(text="Hexadecimal", callback_data="cb_hex")],
-        [InlineKeyboardButton(text="Text to ASCII", callback_data="cb_ascii")]
+        [InlineKeyboardButton(text="Encode Text (Base64/Bin/Hex)", callback_data="cb_text")]
     ])
-    await message.reply("Select source base:", reply_markup=kb)
+    await message.reply("Select source input type:", reply_markup=kb)
     await state.set_state(ConversionStates.selecting_base)
 
 @dp.callback_query(F.data.startswith("cb_"), ConversionStates.selecting_base)
 async def conv_base_sel(callback: types.CallbackQuery, state: FSMContext):
     base = callback.data.split("_")[1]
     await state.update_data(chosen_base=base)
-    await callback.message.edit_text(f"Source: **{base.upper()}**.\nSend value (Decimals supported like 101.11):")
+    await callback.message.edit_text(f"Source: **{base.upper()}**.\nSend value:")
     await state.set_state(ConversionStates.entering_value)
 
 @dp.message(ConversionStates.entering_value)
@@ -155,36 +155,33 @@ async def conv_exec(message: types.Message, state: FSMContext):
     except: await message.reply(res) # Fallback if markdown breaks
     await state.clear()
 
-# ================= UNIVERSAL HANDLER (AI & YT-DLP) =================
+# ================= UNIVERSAL HANDLER (AI & MEDIA) =================
 @dp.message()
 async def univ_handler(message: types.Message):
     if message.text.startswith('/'): return
     text = message.text.strip()
     
-    if any(d in text.lower() for d in ["youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com", "tiktok.com", "fb.gg"]):
-        msg = await message.reply("`Extracting media...`", parse_mode="Markdown")
+    if any(d in text.lower() for d in ["youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com", "tiktok.com", "fb.gg", "x.com", "twitter.com"]):
+        msg = await message.reply("`⚡ Bypassing servers & fetching media...`", parse_mode="Markdown")
         try:
-            filepath, title = await download_media(text, "video") # Defaulting to video for fast workflow
-            file = FSInputFile(filepath)
-            await bot.send_document(message.chat.id, file, caption=f"Extracted: {title}")
-            os.remove(filepath)
+            # We fetch the direct raw URL from Cobalt
+            direct_media_url, title = await download_media(text, "video") 
+            
+            # Sending URL directly to Telegram is 100x faster than downloading to Render first!
+            await bot.send_video(message.chat.id, direct_media_url, caption="⚡ Extracted Successfully.")
             await msg.delete()
         except Exception as e:
-            await msg.edit_text(f"Extraction failed. Link might be private.\nLog: {str(e)[:50]}")
+            await msg.edit_text(f"❌ Extraction failed: {str(e)}")
         return
 
-    msg = await message.reply("`Thinking...`", parse_mode="Markdown")
+    msg = await message.reply("`🤖 Thinking...`", parse_mode="Markdown")
     reply = await get_ai_response(text)
     
-    # ADVANCED FALLBACK: To prevent Telegram "can't parse entities" error
     try:
         await msg.edit_text(reply, parse_mode="Markdown")
     except Exception:
-        try:
-            # If markdown fails, send purely as raw text
-            await msg.edit_text(reply) 
-        except Exception:
-            await msg.edit_text("System Error: Could not display AI response correctly.")
+        try: await msg.edit_text(reply) 
+        except Exception: await msg.edit_text("System Error: Formatting issue.")
 
 async def main():
     await db.load()
